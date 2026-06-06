@@ -1,0 +1,165 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ----------------------------------------------------------------------
+    // GLOBAL HELPERS
+    // ----------------------------------------------------------------------
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { 
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    // Only basic admin check if we had an admins collection
+    function isAdmin() { 
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); 
+    }
+
+    // ----------------------------------------------------------------------
+    // USERS (users/{userId})
+    // ----------------------------------------------------------------------
+    function isValidUser(data) {
+      return data.keys().hasAll(['role']) && data.keys().size() <= 11
+        && data.role is string && data.role in ['owner', 'admin', 'coach', 'parent', 'school']
+        && (data.get('email', '') is string && data.get('email', '').size() <= 200)
+        && (data.get('name', '') is string && data.get('name', '').size() <= 200)
+        && (data.get('affiliation', '') is string && data.get('affiliation', '').size() <= 200)
+        && (data.get('autoRenew', true) is bool)
+        && (data.get('createdAt', 0) is number)
+        && (data.get('updatedAt', 0) is number);
+    }
+    
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn(); // Allow listing users for dashboards
+      allow create: if isSignedIn() 
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUser(incoming());
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && isValidUser(incoming())
+        && (
+            (incoming().diff(existing()).affectedKeys().hasOnly(['role', 'email', 'name', 'affiliation', 'updatedAt', 'autoRenew']))
+        );
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------------------------
+    // SUBSCRIPTIONS (subscriptions/{userId})
+    // ----------------------------------------------------------------------
+    function isValidSubscription(data) {
+      return data.keys().hasAll(['tier', 'status', 'updatedAt'])
+        && data.keys().size() <= 5
+        && data.tier is string && data.tier.size() <= 100
+        && data.status is string && data.status.size() <= 50
+        && data.updatedAt is number
+        && (data.get('gateway', '') is string && data.get('gateway', '').size() <= 100);
+    }
+
+    match /subscriptions/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && isValidId(userId)
+        && isValidSubscription(incoming());
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && isValidSubscription(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------------------------
+    // DRILLS (drills/{drillId})
+    // ----------------------------------------------------------------------
+    function isValidDrill(data) {
+      return data.keys().hasAll(['title', 'description', 'coachId', 'createdAt'])
+        && data.keys().size() <= 7
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.description is string && data.description.size() <= 5000
+        && data.coachId is string && data.coachId.size() <= 128
+        && data.createdAt is number
+        && data.get('duration', '') is string
+        && data.get('difficulty', '') is string
+        && (data.get('tags', []) is list && data.get('tags', []).size() <= 10);
+    }
+
+    match /drills/{drillId} {
+      // Assuming drills are globally readable by signed in users
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn()
+        && isValidId(drillId)
+        && isValidDrill(incoming())
+        && incoming().coachId == request.auth.uid
+        && incoming().createdAt == request.time.toMillis();
+      allow update: if isSignedIn()
+        && isValidDrill(incoming())
+        && existing().coachId == request.auth.uid
+        && incoming().coachId == existing().coachId
+        && incoming().createdAt == existing().createdAt
+        && (
+           incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'duration', 'difficulty', 'tags'])
+        );
+      allow delete: if isSignedIn() && existing().coachId == request.auth.uid;
+    }
+
+    // ----------------------------------------------------------------------
+    // EVENTS (clubs/{clubId}/events/{eventId})
+    // ----------------------------------------------------------------------
+    function isValidEvent(data) {
+      return data.keys().hasAll(['title', 'date', 'clubId'])
+        && data.keys().size() <= 3
+        && data.title is string && data.title.size() <= 200
+        && data.date is string && data.date.size() <= 100
+        && data.clubId is string && data.clubId.size() <= 128;
+    }
+
+    match /clubs/{clubId}/events/{eventId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn()
+        && isValidId(clubId)
+        && isValidId(eventId)
+        && isValidEvent(incoming())
+        && incoming().clubId == clubId;
+      allow update: if isSignedIn()
+        && isValidEvent(incoming())
+        && incoming().clubId == existing().clubId
+        && (
+           incoming().diff(existing()).affectedKeys().hasOnly(['title', 'date'])
+        );
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------------------------
+    // MESSAGES (clubs/{clubId}/messages/{messageId})
+    // ----------------------------------------------------------------------
+    function isValidMessage(data) {
+      return data.keys().hasAll(['text', 'authorId', 'createdAt'])
+        && data.keys().size() <= 3
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.authorId is string && data.authorId.size() <= 128
+        && data.createdAt is int;
+    }
+
+    match /clubs/{clubId}/messages/{messageId} {
+      allow get, list: if isSignedIn();
+      // Only authenticated users can write messages to a club
+      allow create: if isSignedIn()
+        && isValidId(clubId)
+        && isValidId(messageId)
+        && isValidMessage(incoming())
+        && incoming().authorId == request.auth.uid
+        && incoming().createdAt == request.time.toMillis();
+      // Messages cannot be updated
+      allow update: if false; 
+      allow delete: if isAdmin() || (isSignedIn() && existing().authorId == request.auth.uid);
+    }
+  }
+}

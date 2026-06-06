@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user in the PitchFlow application",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "admin", "coach", "parent"] }
+      },
+      "required": ["role"]
+    },
+    "Drill": {
+      "title": "Drill",
+      "description": "A soccer drill definition",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "duration": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "coachId": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["title", "description", "coachId"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "An attendance event or training session",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "clubId": { "type": "string" }
+      },
+      "required": ["title", "date", "clubId"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A chat message within a squad",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "authorId": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["text", "authorId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles connected to their Firebase Auth UID"
+    },
+    "drills/{drillId}": {
+      "schema": { "$ref": "#/entities/Drill" },
+      "description": "Shared drill library across all clubs"
+    },
+    "clubs/{clubId}/events/{eventId}": {
+      "schema": { "$ref": "#/entities/Event" },
+      "description": "Training events per club"
+    },
+    "clubs/{clubId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Chat messages within a club"
+    }
+  }
+}

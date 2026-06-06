@@ -1,0 +1,10 @@
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-pitch-dark: #0D2D1B;
+  --color-pitch-darker: #1A3D29;
+  --color-pitch-lime: #C6FF00;
+  --color-pitch-light: #F8FAF9;
+  --color-pitch-text: #0A1A12;
+}
