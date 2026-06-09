@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Download, Play, Save, RefreshCw, FileText } from 'lucide-react';
+import { Download, Play, Save, RefreshCw, FileText, CornerDownRight } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
